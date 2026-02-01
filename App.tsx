@@ -36,6 +36,10 @@ const App: React.FC = () => {
   const [meetingReactionMessages, setMeetingReactionMessages] = useState<Record<string, string>>({});
   const [isFading, setIsFading] = useState(false);
 
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+
   const tasks: TaskData[] = [
     { id: 't1', name: '書類の整理', description: 'オフィス内の書類を整理します。' },
     { id: 't2', name: 'コーヒーの補充', description: 'コーヒー豆をチェックします。' },
@@ -47,10 +51,6 @@ const App: React.FC = () => {
     { id: 's2', name: '翻訳', tags: '言語', description: '翻訳が可能です。', program: '' },
     { id: 's3', name: '画像生成', tags: '制作', description: '画像を生成します。', program: '' },
   ];
-
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
   useEffect(() => {
     if (viewportRef.current) {
@@ -66,7 +66,7 @@ const App: React.FC = () => {
   const activeAgent = agents.find(a => a.id === activeAgentId);
   const profileAgent = agents.find(a => a.id === profileAgentId);
 
-  // 指定した中心点(clientX, clientY)を維持したままズームする関数
+  // マウス位置を維持しながらズームする中核ロジック
   const performZoom = useCallback((newZoom: number, pivotX?: number, pivotY?: number) => {
     const viewport = viewportRef.current;
     if (!viewport) return;
@@ -74,29 +74,35 @@ const App: React.FC = () => {
     const boundedZoom = Math.min(Math.max(newZoom, 0.3), 2.0);
     const oldZoom = zoom;
 
-    // ピボット点（画面上の座標）を決定（指定がない場合は画面中央）
+    // ピボット点（画面上の座標）を決定
     const px = pivotX ?? viewport.clientWidth / 2;
     const py = pivotY ?? viewport.clientHeight / 2;
 
-    // マップ上の絶対座標（ズーム前のスケール）を計算
+    // ズーム前のマップ上絶対座標
     const mapX = (viewport.scrollLeft + px) / oldZoom;
     const mapY = (viewport.scrollTop + py) / oldZoom;
 
     // ズーム更新
     setZoom(boundedZoom);
 
-    // 新しいスクロール位置を計算（絶対座標 * 新ズーム - 画面上の位置）
-    // 即座に反映させるためにDOMを直接操作
-    viewport.scrollLeft = (mapX * boundedZoom) - px;
-    viewport.scrollTop = (mapY * boundedZoom) - py;
+    // 新しいスクロール位置を即座に適用
+    // Reactの再レンダリングを待つと座標がずれるため、DOMを直接操作して同期させる
+    requestAnimationFrame(() => {
+      if (viewport) {
+        viewport.scrollLeft = (mapX * boundedZoom) - px;
+        viewport.scrollTop = (mapY * boundedZoom) - py;
+      }
+    });
   }, [zoom]);
 
   const handleWheel = (e: React.WheelEvent) => {
     if (isFading) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.05 : 0.05;
     
-    // マウスカーソルの位置を取得
+    // Ctrlキーを併用しない場合でも、より直感的にズームできるように
+    e.preventDefault();
+    const zoomFactor = 0.05;
+    const delta = e.deltaY > 0 ? -zoomFactor : zoomFactor;
+    
     const rect = viewportRef.current?.getBoundingClientRect();
     if (rect) {
       const clientX = e.clientX - rect.left;
@@ -121,6 +127,10 @@ const App: React.FC = () => {
     setMessages(prev => [...prev, botMsg]);
   };
 
+  const handleEvaluation = (id: string, evaluation: 'good' | 'bad') => {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, evaluation } : m));
+  };
+
   const triggerMeetingEvent = useCallback(async (notice: Notice) => {
     if (notice.category !== '緊急会議') return;
     setIsFading(true);
@@ -128,7 +138,6 @@ const App: React.FC = () => {
     setTimeout(async () => {
       setIsEmergencyMeeting(true);
       
-      // 中央を起点にズームアップ
       const targetZoom = 1.2;
       setZoom(targetZoom);
       
@@ -175,11 +184,6 @@ const App: React.FC = () => {
   const onPositionChange = useCallback((id: string, pos: Position) => {
     setAgentPositions(prev => ({ ...prev, [id]: pos }));
   }, []);
-
-  // Fix: Added handleEvaluation function to update message evaluation state
-  const handleEvaluation = (id: string, evaluation: 'good' | 'bad') => {
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, evaluation } : m));
-  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (viewportRef.current) {
@@ -255,9 +259,18 @@ const App: React.FC = () => {
         onWheel={handleWheel}
         className={`flex-1 overflow-auto scrollbar-hide relative bg-[#d6e9df] ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
       >
-        {/* transition-all duration-700 を削除してホイール操作時のレスポンスを向上。transformのみに適用するか緊急時のみにするのがベスト */}
-        <div className="relative origin-top-left transition-transform duration-300 ease-out" style={{ width: FLOOR_WIDTH * zoom, height: FLOOR_HEIGHT * zoom }}>
-          <div className="absolute top-0 left-0 origin-top-left" style={{ width: FLOOR_WIDTH, height: FLOOR_HEIGHT, transform: `scale(${zoom})` }}>
+        {/* 
+            transitionをtransformのみに絞り、スクロール同期を壊さないように調整。
+            マウスホイール中のガタつきを防ぐため、transition時間を短縮(150ms)しつつ、ease-outで滑らかさを維持。
+        */}
+        <div 
+          className="relative origin-top-left transition-transform duration-150 ease-out will-change-transform" 
+          style={{ width: FLOOR_WIDTH * zoom, height: FLOOR_HEIGHT * zoom }}
+        >
+          <div 
+            className="absolute top-0 left-0 origin-top-left" 
+            style={{ width: FLOOR_WIDTH, height: FLOOR_HEIGHT, transform: `scale(${zoom})` }}
+          >
             <OfficeFloor onBulletinClick={() => setIsBulletinOpen(true)} />
             
             {agents.map((agent, index) => {
@@ -312,6 +325,7 @@ const App: React.FC = () => {
           />
         )}
 
+        {/* ズームコントロールパネル */}
         <div className="fixed top-6 right-6 flex flex-col gap-2 z-[280] pointer-events-none">
           <div className="bg-white/90 backdrop-blur-md p-1.5 rounded-2xl shadow-xl border-4 border-orange-50 flex flex-col items-center gap-1 pointer-events-auto">
             <button 
@@ -337,10 +351,11 @@ const App: React.FC = () => {
             <div className="h-px w-8 bg-orange-100 my-1"></div>
             <button 
               onClick={() => {
-                setZoom(0.8);
+                const targetZoom = 0.8;
+                setZoom(targetZoom);
                 if (viewportRef.current) {
-                   viewportRef.current.scrollLeft = (FLOOR_WIDTH * 0.8 - viewportRef.current.clientWidth) / 2;
-                   viewportRef.current.scrollTop = (FLOOR_HEIGHT * 0.8 - viewportRef.current.clientHeight) / 2;
+                   viewportRef.current.scrollLeft = (FLOOR_WIDTH * targetZoom - viewportRef.current.clientWidth) / 2;
+                   viewportRef.current.scrollTop = (FLOOR_HEIGHT * targetZoom - viewportRef.current.clientHeight) / 2;
                 }
               }} 
               className="p-2 hover:bg-orange-50 rounded-xl text-gray-400 hover:text-orange-400 transition-colors"
