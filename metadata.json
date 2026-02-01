@@ -1,0 +1,7 @@
+{
+  "name": "Cozy Office Bot - Animal Crossing Style",
+  "description": "A cute, top-down isometric office environment featuring a wandering AI robot assistant. Inspired by the cozy aesthetics of Animal Crossing, you can chat with your robot buddy while it explores its office home.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
