@@ -1,95 +1,87 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Position } from '../types';
+import { MAP_CONFIG } from '../constants';
 
 interface RobotProps {
   id: string;
   color: string;
   isActive: boolean;
   isSpeaking: boolean;
-  onPositionUpdate: (id: string, pos: Position) => void;
   onClick: (id: string) => void;
-  floorWidth: number;
-  floorHeight: number;
   forcedTarget?: Position | null;
-  message?: string; // 吹き出しをコンポーネント内にカプセル化
+  message?: string;
 }
 
 const Robot: React.FC<RobotProps> = ({ 
-  id, color, isActive, isSpeaking, onPositionUpdate, 
-  onClick, floorWidth, floorHeight, forcedTarget, message 
+  id, color, isActive, isSpeaking, 
+  onClick, forcedTarget, message 
 }) => {
-  const [pos, setPos] = useState<Position>({ 
-    x: 200 + Math.random() * (floorWidth - 400), 
-    y: 200 + Math.random() * (floorHeight - 400) 
-  });
-  const [targetPos, setTargetPos] = useState<Position>(pos);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [facing, setFacing] = useState<'left' | 'right'>('right');
   const [isWobbling, setIsWobbling] = useState(false);
-  
-  const lastReportedPos = useRef<Position>(pos);
+
+  // 内部的な位置管理 (Refを使用してリアクトの再レンダリングをバイパス)
+  const posRef = useRef<Position>({ 
+    x: 200 + Math.random() * (MAP_CONFIG.FLOOR_WIDTH - 400), 
+    y: 200 + Math.random() * (MAP_CONFIG.FLOOR_HEIGHT - 400) 
+  });
+  const targetRef = useRef<Position>(posRef.current);
 
   useEffect(() => {
     if (forcedTarget) {
-      setFacing(forcedTarget.x < pos.x ? 'left' : 'right');
-      setTargetPos(forcedTarget);
+      targetRef.current = forcedTarget;
+      setFacing(forcedTarget.x < posRef.current.x ? 'left' : 'right');
       return;
     }
     const moveInterval = setInterval(() => {
       if (!isSpeaking) {
-        const nextX = 200 + Math.random() * (floorWidth - 400);
-        const nextY = 200 + Math.random() * (floorHeight - 400);
-        setFacing(nextX < targetPos.x ? 'left' : 'right');
-        setTargetPos({ x: nextX, y: nextY });
+        const nextX = 200 + Math.random() * (MAP_CONFIG.FLOOR_WIDTH - 400);
+        const nextY = 200 + Math.random() * (MAP_CONFIG.FLOOR_HEIGHT - 400);
+        setFacing(nextX < posRef.current.x ? 'left' : 'right');
+        targetRef.current = { x: nextX, y: nextY };
       }
-    }, 5000 + Math.random() * 2000);
+    }, 4000 + Math.random() * 3000);
     return () => clearInterval(moveInterval);
-  }, [isSpeaking, floorWidth, floorHeight, forcedTarget]);
+  }, [isSpeaking, forcedTarget]);
 
   useEffect(() => {
-    const lerpRate = 0.015;
+    const lerp = (start: number, end: number, amt: number) => (1 - amt) * start + amt * end;
     let animationId: number;
 
-    const animate = () => {
-      setPos(prev => {
-        const nextX = prev.x + (targetPos.x - prev.x) * lerpRate;
-        const nextY = prev.y + (targetPos.y - prev.y) * lerpRate;
-        const dist = Math.sqrt(Math.pow(targetPos.x - nextX, 2) + Math.pow(targetPos.y - nextY, 2));
-        
-        if (dist < 1) return prev;
-        
-        const newPos = { x: nextX, y: nextY };
-        // パフォーマンス改善: 親への報告頻度を下げる (50px以上移動した場合のみ)
-        const distFromLastReport = Math.sqrt(Math.pow(newPos.x - lastReportedPos.current.x, 2) + Math.pow(newPos.y - lastReportedPos.current.y, 2));
-        if (distFromLastReport > 50) {
-          lastReportedPos.current = newPos;
-          onPositionUpdate(id, newPos);
-        }
-        
-        return newPos;
-      });
-      animationId = requestAnimationFrame(animate);
+    const update = () => {
+      posRef.current.x = lerp(posRef.current.x, targetRef.current.x, 0.02);
+      posRef.current.y = lerp(posRef.current.y, targetRef.current.y, 0.02);
+
+      if (containerRef.current) {
+        containerRef.current.style.setProperty('--x', `${posRef.current.x}px`);
+        containerRef.current.style.setProperty('--y', `${posRef.current.y}px`);
+      }
+      animationId = requestAnimationFrame(update);
     };
 
-    animationId = requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(animationId);
-  }, [id, targetPos, onPositionUpdate]);
+  }, []);
 
   useEffect(() => {
     if (isSpeaking) {
       setIsWobbling(true);
-      const timer = setTimeout(() => setIsWobbling(false), 2000);
+      const timer = setTimeout(() => setIsWobbling(false), 3000);
       return () => clearTimeout(timer);
     }
   }, [isSpeaking]);
 
   return (
     <div 
+      ref={containerRef}
       className="absolute pointer-events-auto cursor-pointer z-20"
       onClick={(e) => { e.stopPropagation(); onClick(id); }}
-      style={{ left: `${pos.x}px`, top: `${pos.y}px`, transform: `translate(-50%, -50%)` }}
+      style={{ 
+        left: 0, top: 0, 
+        transform: `translate(calc(var(--x) - 50%), calc(var(--y) - 50%))` 
+      } as React.CSSProperties}
     >
-      {/* 吹き出しのカプセル化 */}
       {message && (
         <div className="absolute left-1/2 -top-32 -translate-x-1/2 w-max max-w-[250px] z-50 animate-in fade-in zoom-in slide-in-from-bottom-2">
           <div className="bg-white p-4 rounded-3xl border-4 border-blue-400 shadow-xl relative">
@@ -113,9 +105,6 @@ const Robot: React.FC<RobotProps> = ({
             <div className="w-3 h-3 bg-white rounded-full flex items-center justify-center"><div className="w-1.5 h-1.5 bg-black rounded-full"></div></div>
           </div>
           <div className="mt-1 w-8 h-1 bg-white/20 rounded-full"></div>
-        </div>
-        <div className="absolute -top-4 w-1 h-4 bg-gray-400 border-2 border-white">
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-3 h-3 bg-red-400 rounded-full border-2 border-white"></div>
         </div>
       </div>
     </div>
