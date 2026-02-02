@@ -4,19 +4,16 @@ export interface Message {
   role: 'user' | 'bot';
   text: string;
   timestamp: Date;
-  evaluation?: 'good' | 'bad';
   agentId?: string;
 }
 
 export type SidebarItem = 
   | 'エージェント' 
-  | '新規チャット' 
-  | '履歴リスト' 
   | 'プロジェクト' 
-  | 'スキル' 
-  | 'プロンプト' 
-  | 'ナレッジ' 
   | 'タスク'
+  | 'プロンプト' 
+  | 'スキル'
+  | 'メモ'
   | '設定';
 
 export interface Position {
@@ -28,10 +25,12 @@ export interface AgentConfig {
   id: string;
   nickname: string;
   color: string;
-  prompt: string;
-  selectedPromptId: string;
-  selectedSkillId: string;
-  selectedTaskId: string;
+  selectedProjectId?: string;
+  selectedTaskId?: string;
+  selectedPromptId?: string;
+  selectedSkillId?: string;
+  status?: 'idle' | 'working' | 'meeting';
+  reaction?: string;
 }
 
 export interface Notice {
@@ -41,23 +40,37 @@ export interface Notice {
   updatedAt: string;
 }
 
-export interface TaskData {
+export interface ProjectData {
   id: string;
   name: string;
   description: string;
+  color: string;
 }
 
-export interface ProjectData {
+export interface TaskData {
+  id: string;
+  projectId: string;
   name: string;
-  idea: string;
-  plan: string;
-  milestones: { id: string; text: string; completed: boolean }[];
+  description: string;
+  status: 'todo' | 'doing' | 'done';
+}
+
+export interface PromptData {
+  id: string;
+  name: string;
+  content: string; // 実際の性格指示テキスト
 }
 
 export interface SkillData {
   id: string;
   name: string;
-  tags: string;
   description: string;
-  program: string;
+  code: string; // 実行プログラム（擬似コード）
+}
+
+export interface MemoData {
+  id: string;
+  title: string;
+  content: string;
+  updatedAt: string;
 }

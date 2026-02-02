@@ -49,12 +49,22 @@ export const useAgentManager = () => {
     return reactions;
   }, [agents]);
 
+  // FIX: Added clearMeetingReactions function
+  const clearMeetingReactions = useCallback(() => {
+    setMeetingReactions({});
+  }, []);
+
   return {
-    agents, addAgent, 
+    agents, 
+    // FIX: Added setAgents to return values
+    setAgents,
+    addAgent, 
     messages, sendMessage, setMessages,
     activeAgentId, setActiveAgentId,
     isBotThinking,
     notices, setNotices,
-    meetingReactions, setMeetingReactions, triggerMeeting
+    meetingReactions, setMeetingReactions, triggerMeeting,
+    // FIX: Added clearMeetingReactions to return values
+    clearMeetingReactions
   };
 };

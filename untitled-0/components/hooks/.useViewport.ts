@@ -1,6 +1,6 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { MAP_CONFIG } from '../constants/masterData';
+import { MAP_CONFIG } from '../constants';
 
 export const useViewport = () => {
   const [zoom, setZoom] = useState(MAP_CONFIG.DEFAULT_ZOOM);
@@ -12,7 +12,9 @@ export const useViewport = () => {
   const performZoom = useCallback((delta: number, pivotX?: number, pivotY?: number) => {
     setZoom(prevZoom => {
       const newZoom = Math.min(Math.max(prevZoom + delta, MAP_CONFIG.MIN_ZOOM), MAP_CONFIG.MAX_ZOOM);
+      
       if (pivotX !== undefined && pivotY !== undefined) {
+        // ピボット位置を維持するためのオフセット計算
         const zoomRatio = newZoom / prevZoom;
         setOffset(prev => ({
           x: pivotX - (pivotX - prev.x) * zoomRatio,
@@ -54,9 +56,10 @@ export const useViewport = () => {
     });
   }, []);
 
+  // 初期配置
   useEffect(() => {
     centerOn(MAP_CONFIG.CENTRAL_PLAZA.x, MAP_CONFIG.CENTRAL_PLAZA.y, MAP_CONFIG.DEFAULT_ZOOM);
-  }, [centerOn]);
+  }, []);
 
-  return { viewportRef, zoom, offset, isDragging, handleWheel, handleDrag, centerOn, performZoom };
+  return { viewportRef, zoom, offset, isDragging, performZoom, handleWheel, handleDrag, centerOn };
 };
