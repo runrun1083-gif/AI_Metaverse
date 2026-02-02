@@ -20,6 +20,7 @@ const Main: React.FC = () => {
 
   useEffect(() => {
     if (agents.length === 0) {
+      // Fix: Added required 'status' property to match AgentNode interface
       addAgent({
         id: 'a1',
         nickname: 'タグ・プロト',
@@ -28,7 +29,8 @@ const Main: React.FC = () => {
         targetPosition: { x: 1600, y: 1100 },
         tags: new Set(['p_cheerful', 's_idle']),
         actionHistory: [],
-        thoughtHistory: []
+        thoughtHistory: [],
+        status: 'idle'
       });
     }
   }, [addAgent, agents.length]);
